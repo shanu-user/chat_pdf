@@ -27,8 +27,8 @@ logger = logging.getLogger(__name__)
 OLLAMA_API_URL = "https://ollama.com"
 CHAT_MODEL = os.getenv("OLLAMA_CHAT_MODEL", "gemma4:31b")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
-# Render/Vercel Functions have ~4.5 MB request body limit; use smaller limits on serverless, larger locally
-if os.getenv("VERCEL") or os.getenv("RENDER"):
+# Vercel Functions have ~4.5 MB request body limit; Render Web Service allows larger uploads
+if os.getenv("VERCEL"):
     MAX_SOURCE_BYTES = 4 * 1024 * 1024
     MAX_REQUEST_BYTES = 4_250_000
 else:
