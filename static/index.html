@@ -17,36 +17,128 @@
         --line: #e7e8e2;
         --green: #426b4e;
         --green-light: #edf3ed;
+        --sidebar-bg: #ffffff;
+        --sidebar-border: #e7e8e2;
+        --sidebar-text: #565a50;
+        --upload-bg: #fafbf9;
+        --upload-border: #bcc8ba;
+        --source-bg: #f7f8f5;
+        --source-border: transparent;
+        --source-text: #3c4038;
+        --file-icon-bg: #ffffff;
+        --file-icon-color: #b15a48;
+        --file-icon-border: #e6e8e0;
+        --topbar-bg: rgb(255 255 255 / 75%);
+        --topbar-border: #e7e8e2;
+        --conversation-bg: #f8f8f6;
+        --message-body-text: #30342d;
+        --user-msg-bg: #eff6ff;
+        --user-msg-border: #bfdbfe;
+        --bot-msg-bg: #ffffff;
+        --bot-msg-border: #e2e8f0;
+        --citation-bg: #f2f4ef;
+        --citation-border: #a8b9a8;
+        --citation-text: #50544c;
+        --citation-label: #506448;
+        --composer-bg: #ffffff;
+        --composer-border: #dfe1d9;
+        --composer-shadow: 0 8px 26px rgb(35 44 31 / 6%);
+        --status-text: #a13f32;
+        --composer-gradient: linear-gradient(transparent, #f8f8f6 18%);
+      }
+
+      [data-theme="dark"] {
+        color-scheme: dark;
+        color: #e7e5e2;
+        background: #0f1115;
+        --muted: #8a8886;
+        --line: #333741;
+        --green: #6fb06d;
+        --green-light: #232730;
+        --sidebar-bg: #15181f;
+        --sidebar-border: #333741;
+        --sidebar-text: #b9b8b6;
+        --upload-bg: #1d212a;
+        --upload-border: #4c5361;
+        --source-bg: #1d212a;
+        --source-border: #333741;
+        --source-text: #d8d6d1;
+        --file-icon-bg: #222630;
+        --file-icon-color: #e0d39d;
+        --file-icon-border: #333741;
+        --topbar-bg: rgba(21 24 31 / 75%);
+        --topbar-border: #333741;
+        --conversation-bg: #0f1115;
+        --message-body-text: #e7e5e2;
+        --user-msg-bg: #1f2937;
+        --user-msg-border: #374151;
+        --bot-msg-bg: #1c1f26;
+        --bot-msg-border: #333741;
+        --citation-bg: #1c1f26;
+        --citation-border: #4c5361;
+        --citation-text: #b9b8b6;
+        --citation-label: #8ca68c;
+        --composer-bg: #15181f;
+        --composer-border: #333741;
+        --composer-shadow: 0 8px 26px rgb(0 0 0 / 60%);
+        --status-text: #f4a261;
+        --composer-gradient: linear-gradient(transparent, #0f1115 18%);
       }
       * { box-sizing: border-box; }
       body { margin: 0; height: 100vh; min-height: 560px; overflow: hidden; }
       button, input, textarea { font: inherit; }
-      .app { display: grid; grid-template-columns: 300px minmax(0, 1fr); height: 100%; }
-      aside { display: flex; flex-direction: column; min-width: 0; padding: 26px 18px; border-right: 1px solid var(--line); background: #fff; }
+      .app { display: grid; grid-template-columns: 300px minmax(0, 1fr); height: 100vh; overflow: hidden; }
+      aside { display: flex; flex-direction: column; min-width: 0; height: 100vh; overflow: hidden; border-right: 1px solid var(--line); background: var(--sidebar-bg); }
+      #source-list {
+        display: flex;
+        flex-direction: column;
+        gap: 7px;
+        overflow-y: auto;
+        flex: 1;
+      }
+      .source-slot {
+        height: 56px;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease;
+      }
+      .source-slot.visible {
+        opacity: 1;
+        pointer-events: auto;
+      }
       .brand { display: flex; align-items: center; gap: 11px; margin: 0 0 30px 4px; font-size: 1.08rem; font-weight: 760; letter-spacing: -0.03em; }
       .brand-mark { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 11px; background: var(--green-light); color: var(--green); font-size: 1rem; }
-      .side-heading { display: flex; align-items: center; justify-content: space-between; padding: 0 5px; color: #565a50; font-size: 0.78rem; font-weight: 750; letter-spacing: 0.08em; text-transform: uppercase; }
+      .side-heading { display: flex; align-items: center; justify-content: space-between; padding: 0 5px; color: var(--sidebar-text); font-size: 0.78rem; font-weight: 750; letter-spacing: 0.08em; text-transform: uppercase; }
       .source-count { color: var(--muted); font-size: 0.75rem; font-weight: 600; letter-spacing: 0; text-transform: none; }
-      .upload { display: flex; align-items: center; justify-content: center; gap: 9px; width: 100%; margin: 14px 0 8px; padding: 12px 14px; border: 1px dashed #bcc8ba; border-radius: 11px; background: #fafbf9; color: var(--green); font-weight: 700; cursor: pointer; }
+      .upload { display: flex; align-items: center; justify-content: center; gap: 9px; width: 100%; margin: 14px 0 8px; padding: 12px 14px; border: 1px dashed var(--upload-border); border-radius: 11px; background: var(--upload-bg); color: var(--green); font-weight: 700; cursor: pointer; }
       .upload:hover { border-color: var(--green); background: var(--green-light); }
       .upload input { display: none; }
       .hint { margin: 0 5px 14px; color: var(--muted); font-size: 0.76rem; line-height: 1.55; }
-      #source-list { display: grid; gap: 7px; overflow-y: auto; }
       .empty-sources { margin: 10px 5px; color: #96998f; font-size: 0.83rem; line-height: 1.5; }
-      .source-item { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px; border: 1px solid transparent; border-radius: 10px; background: #f7f8f5; }
-      .file-icon { display: grid; flex: 0 0 31px; height: 34px; place-items: center; border: 1px solid #e6e8e0; border-radius: 7px; background: white; color: #b15a48; font-size: 0.62rem; font-weight: 800; }
-      .source-name { min-width: 0; flex: 1; overflow: hidden; color: #3c4038; font-size: 0.82rem; text-overflow: ellipsis; white-space: nowrap; }
+      .source-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+        padding: 10px;
+        border: 1px solid var(--source-border);
+        border-radius: 10px;
+        background: var(--source-bg);
+        height: 100%;
+      }
+      .file-icon { display: grid; flex: 0 0 31px; height: 34px; place-items: center; border: 1px solid var(--file-icon-border); border-radius: 7px; background: var(--file-icon-bg); color: var(--file-icon-color); font-size: 0.62rem; font-weight: 800; }
+      .source-name { min-width: 0; flex: 1; overflow: hidden; color: var(--source-text); font-size: 0.82rem; text-overflow: ellipsis; white-space: nowrap; }
       .remove-source { border: 0; background: transparent; color: #92958c; font-size: 1.15rem; cursor: pointer; }
       .remove-source:hover { color: #a34238; }
       .side-note { margin-top: auto; padding: 13px 5px 0; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.74rem; line-height: 1.55; }
-      main { display: flex; min-width: 0; flex-direction: column; }
-      .topbar { display: flex; align-items: center; justify-content: space-between; min-height: 76px; padding: 14px 34px; border-bottom: 1px solid var(--line); background: rgb(255 255 255 / 75%); }
-      .notebook-title { color: #30342d; font-size: 0.98rem; font-weight: 720; }
+      main { display: flex; min-width: 0; flex-direction: column; height: 100vh; overflow: hidden; }
+      .topbar { display: flex; align-items: center; justify-content: space-between; min-height: 76px; padding: 14px 34px; border-bottom: 1px solid var(--topbar-border); background: var(--topbar-bg); flex: 0 0 auto; }
+      .notebook-title { color: var(--message-body-text); font-size: 0.98rem; font-weight: 720; }
       .model-label { color: var(--muted); font-size: 0.78rem; }
-      .conversation { display: flex; flex: 1; flex-direction: column; overflow-y: auto; scroll-behavior: smooth; }
+      .conversation { display: flex; flex: 1; flex-direction: column; overflow-y: auto; scroll-behavior: smooth; min-height: 0; }
       #chat { width: min(850px, 100%); margin: 0 auto; padding: 34px 28px; }
       .welcome { max-width: 630px; margin: 11vh auto 0; text-align: center; }
-      .welcome-icon { display: grid; width: 58px; height: 58px; margin: 0 auto 20px; place-items: center; border: 1px solid #e1e5dc; border-radius: 18px; background: white; color: var(--green); font-size: 1.4rem; }
+      .welcome-icon { display: grid; width: 58px; height: 58px; margin: 0 auto 20px; place-items: center; border: 1px solid #e1e5dc; border-radius: 18px; background: var(--file-icon-bg); color: var(--green); font-size: 1.4rem; }
       .welcome h1 { margin: 0 0 12px; color: #282c25; font-size: clamp(1.65rem, 3vw, 2.2rem); letter-spacing: -0.05em; }
       .welcome p { margin: 0; color: var(--muted); font-size: 0.94rem; line-height: 1.7; }
       .message { display: flex; gap: 13px; margin: 0 0 25px; animation: appear 180ms ease-out; }
@@ -54,23 +146,23 @@
       .message.user .avatar { background: #eeefe9; color: #5b6055; }
       .message-content { min-width: 0; flex: 1; padding-top: 2px; }
       .message-title { margin: 0 0 7px; color: #6e7268; font-size: 0.75rem; font-weight: 750; letter-spacing: 0.06em; text-transform: uppercase; }
-      .message-body { color: #30342d; font-size: 0.94rem; line-height: 1.7; overflow-wrap: anywhere; white-space: pre-wrap; }
+      .message-body { color: var(--message-body-text); font-size: 0.94rem; line-height: 1.7; overflow-wrap: anywhere; white-space: pre-wrap; }
       .message.user .message-body { font-weight: 560; }
       details { margin-top: 13px; }
       summary { width: fit-content; color: var(--green); font-size: 0.82rem; font-weight: 700; cursor: pointer; }
-      .citation { margin-top: 10px; padding: 12px 14px; border-left: 2px solid #a8b9a8; border-radius: 0 8px 8px 0; background: #f2f4ef; }
-      .citation-label { margin: 0 0 5px; color: #506448; font-size: 0.76rem; font-weight: 750; }
-      .citation-text { margin: 0; color: #50544c; font-size: 0.82rem; line-height: 1.55; white-space: pre-wrap; }
-      .composer-wrap { padding: 15px 24px 18px; background: linear-gradient(transparent, #f8f8f6 18%); }
-      .composer { width: min(850px, 100%); margin: 0 auto; padding: 14px; border: 1px solid #dfe1d9; border-radius: 15px; background: #fff; box-shadow: 0 8px 26px rgb(35 44 31 / 6%); }
-      textarea { display: block; width: 100%; min-height: 52px; max-height: 160px; padding: 6px 8px; resize: none; border: 0; outline: 0; color: #30342d; font: inherit; font-size: 0.92rem; line-height: 1.5; }
+      .citation { margin-top: 10px; padding: 12px 14px; border-left: 2px solid var(--citation-border); border-radius: 0 8px 8px 0; background: var(--citation-bg); }
+      .citation-label { margin: 0 0 5px; color: var(--citation-label); font-size: 0.76rem; font-weight: 750; }
+      .citation-text { margin: 0; color: var(--citation-text); font-size: 0.82rem; line-height: 1.55; white-space: pre-wrap; }
+      .composer-wrap { padding: 15px 24px 18px; background: var(--composer-gradient); flex: 0 0 auto; }
+      .composer { width: min(850px, 100%); margin: 0 auto; padding: 14px; border: 1px solid var(--composer-border); border-radius: 15px; background: var(--composer-bg); box-shadow: var(--composer-shadow); }
+      textarea { display: block; width: 100%; min-height: 52px; max-height: 160px; padding: 6px 8px; resize: none; border: 0; outline: 0; color: var(--message-body-text); font: inherit; font-size: 0.92rem; line-height: 1.5; }
       textarea::placeholder { color: #9b9e95; }
       .composer-bottom { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 4px 0; }
       .access-field { width: min(210px, 55%); padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; outline-color: #a8b9a8; font-size: 0.76rem; }
       #ask-button { display: inline-flex; align-items: center; gap: 8px; padding: 9px 15px; border: 0; border-radius: 9px; background: var(--green); color: white; font-size: 0.82rem; font-weight: 720; cursor: pointer; }
       #ask-button:hover { background: #34583e; }
       #ask-button:disabled { cursor: wait; opacity: 0.66; }
-      #status { width: min(850px, 100%); min-height: 20px; margin: 8px auto 0; padding: 0 5px; color: #a13f32; font-size: 0.8rem; }
+      #status { width: min(850px, 100%); min-height: 20px; margin: 8px auto 0; padding: 0 5px; color: var(--status-text); font-size: 0.8rem; }
       @keyframes appear { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
       @media (max-width: 760px) {
         body { min-height: 500px; }
@@ -100,7 +192,14 @@
           <input id="source-files" type="file" accept="application/pdf,.pdf" multiple>
         </label>
         <p class="hint">Attach up to 5 text-based PDFs. Combined upload limit: 25 MB.</p>
-        <div id="source-list"><p class="empty-sources">Add PDFs to ground your conversation in your own sources.</p></div>
+        <div id="source-list">
+          <div class="source-slot" id="slot-0"></div>
+          <div class="source-slot" id="slot-1"></div>
+          <div class="source-slot" id="slot-2"></div>
+          <div class="source-slot" id="slot-3"></div>
+          <div class="source-slot" id="slot-4"></div>
+          <p class="empty-sources">Add PDFs to ground your conversation in your own sources.</p>
+        </div>
         <div class="side-note">Sources stay in this browser tab and are reprocessed for each question. Nothing is saved as a durable notebook.</div>
       </aside>
 
@@ -108,6 +207,7 @@
         <header class="topbar">
           <div class="notebook-title">New notebook</div>
           <div class="model-label">Embeddings · CPU &nbsp;|&nbsp; Chat · Ollama Cloud</div>
+          <button id="theme-toggle" type="button" aria-label="Toggle dark mode" style="background:none;border:none;cursor:pointer;padding:4px;font-size:1.1rem;">����</button>
         </header>
         <section class="conversation" aria-label="Conversation">
           <div id="chat">
@@ -122,7 +222,7 @@
           <form id="question-form" class="composer">
             <textarea id="question" maxlength="1000" placeholder="Ask a question about your sources…" aria-label="Your question" required></textarea>
             <div class="composer-bottom">
-              <button id="ask-button" type="submit"><span>Ask</span><span aria-hidden="true">↑</span></button>
+              <button id="ask-button" type="submit"><span aria-hidden="true">↑</span></button>
             </div>
           </form>
           <div id="status" role="status" aria-live="polite"></div>
@@ -144,38 +244,52 @@
       let sources = [];
 
       function renderSources() {
-        sourceList.replaceChildren();
         sourceCount.textContent = `${sources.length} / ${maxSources}`;
+        const empty = document.querySelector(".empty-sources");
         if (!sources.length) {
-          const empty = document.createElement("p");
-          empty.className = "empty-sources";
-          empty.textContent = "Add PDFs to ground your conversation in your own sources.";
-          sourceList.append(empty);
+          empty.style.display = "block";
+          document.querySelectorAll(".source-slot").forEach((slot) => {
+            slot.className = "source-slot";
+            slot.innerHTML = "";
+          });
           return;
         }
-
-        for (const [index, file] of sources.entries()) {
-          const item = document.createElement("div");
-          item.className = "source-item";
-          const icon = document.createElement("span");
-          icon.className = "file-icon";
-          icon.textContent = "PDF";
-          const name = document.createElement("span");
-          name.className = "source-name";
-          name.title = file.name;
-          name.textContent = file.name;
-          const remove = document.createElement("button");
-          remove.type = "button";
-          remove.className = "remove-source";
-          remove.setAttribute("aria-label", `Remove ${file.name}`);
-          remove.textContent = "×";
-          remove.addEventListener("click", () => {
-            sources.splice(index, 1);
-            renderSources();
-          });
-          item.append(icon, name, remove);
-          sourceList.append(item);
-        }
+        empty.style.display = "none";
+        document.querySelectorAll(".source-slot").forEach((slot, idx) => {
+          if (idx < sources.length) {
+            const file = sources[idx];
+            slot.className = "source-slot visible";
+            const existing = slot.querySelector(".source-item");
+            if (existing) {
+              existing.querySelector(".source-name").textContent = file.name;
+              existing.querySelector(".source-name").title = file.name;
+            } else {
+              const item = document.createElement("div");
+              item.className = "source-item";
+              const icon = document.createElement("span");
+              icon.className = "file-icon";
+              icon.textContent = "PDF";
+              const name = document.createElement("span");
+              name.className = "source-name";
+              name.title = file.name;
+              name.textContent = file.name;
+              const remove = document.createElement("button");
+              remove.type = "button";
+              remove.className = "remove-source";
+              remove.setAttribute("aria-label", `Remove ${file.name}`);
+              remove.textContent = "×";
+              remove.addEventListener("click", () => {
+                sources = sources.filter((f) => f !== file);
+                renderSources();
+              });
+              item.append(icon, name, remove);
+              slot.appendChild(item);
+            }
+          } else {
+            slot.className = "source-slot";
+            slot.innerHTML = "";
+          }
+        });
       }
 
       function addMessage(kind, text, citations = []) {
@@ -220,6 +334,20 @@
         conversation.scrollTop = conversation.scrollHeight;
       }
 
+      function setSendingState(sending) {
+        if (sending) {
+          askButton.innerHTML = '<span aria-hidden="true">⏹</span>';
+          askButton.setAttribute("aria-label", "Stop generating");
+          questionInput.disabled = true;
+          questionInput.value = "";
+        } else {
+          askButton.innerHTML = '<span aria-hidden="true">↑</span>';
+          askButton.setAttribute("aria-label", "Send");
+          questionInput.disabled = false;
+          questionInput.focus();
+        }
+      }
+
       fileInput.addEventListener("change", () => {
         status.textContent = "";
         const names = new Set(sources.map((file) => file.name));
@@ -239,6 +367,8 @@
         renderSources();
       });
 
+      let abortController = null;
+
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
         status.textContent = "";
@@ -257,28 +387,68 @@
           return;
         }
 
+        if (abortController) {
+          abortController.abort();
+          abortController = null;
+          setSendingState(false);
+          return;
+        }
+
+        abortController = new AbortController();
         addMessage("user", question);
-        askButton.disabled = true;
-        askButton.querySelector("span").textContent = "Searching…";
+        setSendingState(true);
         const data = new FormData();
         data.append("question", question);
         for (const source of sources) data.append("sources", source);
 
         try {
-          const response = await fetch("/api/ask", { method: "POST", body: data });
+          const response = await fetch("/api/ask", { method: "POST", body: data, signal: abortController.signal });
           const result = await response.json();
           if (!response.ok) {
             throw new Error(result.detail || "The request failed. Please try again.");
           }
           addMessage("assistant", result.answer, result.sources);
-          questionInput.value = "";
         } catch (error) {
-          status.textContent = error instanceof Error ? error.message : "Unable to reach the service.";
+          if (error.name === "AbortError") {
+            status.textContent = "Generation stopped.";
+          } else {
+            status.textContent = error instanceof Error ? error.message : "Unable to reach the service.";
+          }
         } finally {
-          askButton.disabled = false;
-          askButton.querySelector("span").textContent = "Ask";
-          questionInput.focus();
+          abortController = null;
+          setSendingState(false);
         }
+      });
+
+      askButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        if (abortController) {
+          abortController.abort();
+          abortController = null;
+          setSendingState(false);
+        } else {
+          form.dispatchEvent(new Event("submit"));
+        }
+      });
+
+      questionInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          form.dispatchEvent(new Event("submit"));
+        }
+      });
+
+      const themeToggle = document.querySelector("#theme-toggle");
+      const savedTheme = localStorage.getItem("theme") || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      document.documentElement.setAttribute("data-theme", savedTheme);
+      themeToggle.textContent = savedTheme === "dark" ? "☀️" : "🌙";
+
+      themeToggle.addEventListener("click", () => {
+        const current = document.documentElement.getAttribute("data-theme");
+        const next = current === "dark" ? "light" : "dark";
+        document.documentElement.setAttribute("data-theme", next);
+        localStorage.setItem("theme", next);
+        themeToggle.textContent = next === "dark" ? "☀️" : "🌙";
       });
 
       renderSources();
