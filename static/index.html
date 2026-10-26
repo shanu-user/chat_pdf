@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f8f8f6">
+    <title>Sourcebook — Document Chat</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: #242720;
+        background: #f8f8f6;
+        font-synthesis: none;
+        text-rendering: optimizeLegibility;
+        --muted: #76796f;
+        --line: #e7e8e2;
+        --green: #426b4e;
+        --green-light: #edf3ed;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; height: 100vh; min-height: 560px; overflow: hidden; }
+      button, input, textarea { font: inherit; }
+      .app { display: grid; grid-template-columns: 300px minmax(0, 1fr); height: 100%; }
+      aside { display: flex; flex-direction: column; min-width: 0; padding: 26px 18px; border-right: 1px solid var(--line); background: #fff; }
+      .brand { display: flex; align-items: center; gap: 11px; margin: 0 0 30px 4px; font-size: 1.08rem; font-weight: 760; letter-spacing: -0.03em; }
+      .brand-mark { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 11px; background: var(--green-light); color: var(--green); font-size: 1rem; }
+      .side-heading { display: flex; align-items: center; justify-content: space-between; padding: 0 5px; color: #565a50; font-size: 0.78rem; font-weight: 750; letter-spacing: 0.08em; text-transform: uppercase; }
+      .source-count { color: var(--muted); font-size: 0.75rem; font-weight: 600; letter-spacing: 0; text-transform: none; }
+      .upload { display: flex; align-items: center; justify-content: center; gap: 9px; width: 100%; margin: 14px 0 8px; padding: 12px 14px; border: 1px dashed #bcc8ba; border-radius: 11px; background: #fafbf9; color: var(--green); font-weight: 700; cursor: pointer; }
+      .upload:hover { border-color: var(--green); background: var(--green-light); }
+      .upload input { display: none; }
+      .hint { margin: 0 5px 14px; color: var(--muted); font-size: 0.76rem; line-height: 1.55; }
+      #source-list { display: grid; gap: 7px; overflow-y: auto; }
+      .empty-sources { margin: 10px 5px; color: #96998f; font-size: 0.83rem; line-height: 1.5; }
+      .source-item { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px; border: 1px solid transparent; border-radius: 10px; background: #f7f8f5; }
+      .file-icon { display: grid; flex: 0 0 31px; height: 34px; place-items: center; border: 1px solid #e6e8e0; border-radius: 7px; background: white; color: #b15a48; font-size: 0.62rem; font-weight: 800; }
+      .source-name { min-width: 0; flex: 1; overflow: hidden; color: #3c4038; font-size: 0.82rem; text-overflow: ellipsis; white-space: nowrap; }
+      .remove-source { border: 0; background: transparent; color: #92958c; font-size: 1.15rem; cursor: pointer; }
+      .remove-source:hover { color: #a34238; }
+      .side-note { margin-top: auto; padding: 13px 5px 0; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.74rem; line-height: 1.55; }
+      main { display: flex; min-width: 0; flex-direction: column; }
+      .topbar { display: flex; align-items: center; justify-content: space-between; min-height: 76px; padding: 14px 34px; border-bottom: 1px solid var(--line); background: rgb(255 255 255 / 75%); }
+      .notebook-title { color: #30342d; font-size: 0.98rem; font-weight: 720; }
+      .model-label { color: var(--muted); font-size: 0.78rem; }
+      .conversation { display: flex; flex: 1; flex-direction: column; overflow-y: auto; scroll-behavior: smooth; }
+      #chat { width: min(850px, 100%); margin: 0 auto; padding: 34px 28px; }
+      .welcome { max-width: 630px; margin: 11vh auto 0; text-align: center; }
+      .welcome-icon { display: grid; width: 58px; height: 58px; margin: 0 auto 20px; place-items: center; border: 1px solid #e1e5dc; border-radius: 18px; background: white; color: var(--green); font-size: 1.4rem; }
+      .welcome h1 { margin: 0 0 12px; color: #282c25; font-size: clamp(1.65rem, 3vw, 2.2rem); letter-spacing: -0.05em; }
+      .welcome p { margin: 0; color: var(--muted); font-size: 0.94rem; line-height: 1.7; }
+      .message { display: flex; gap: 13px; margin: 0 0 25px; animation: appear 180ms ease-out; }
+      .avatar { display: grid; flex: 0 0 32px; height: 32px; place-items: center; border-radius: 50%; background: var(--green-light); color: var(--green); font-size: 0.78rem; font-weight: 800; }
+      .message.user .avatar { background: #eeefe9; color: #5b6055; }
+      .message-content { min-width: 0; flex: 1; padding-top: 2px; }
+      .message-title { margin: 0 0 7px; color: #6e7268; font-size: 0.75rem; font-weight: 750; letter-spacing: 0.06em; text-transform: uppercase; }
+      .message-body { color: #30342d; font-size: 0.94rem; line-height: 1.7; overflow-wrap: anywhere; white-space: pre-wrap; }
+      .message.user .message-body { font-weight: 560; }
+      details { margin-top: 13px; }
+      summary { width: fit-content; color: var(--green); font-size: 0.82rem; font-weight: 700; cursor: pointer; }
+      .citation { margin-top: 10px; padding: 12px 14px; border-left: 2px solid #a8b9a8; border-radius: 0 8px 8px 0; background: #f2f4ef; }
+      .citation-label { margin: 0 0 5px; color: #506448; font-size: 0.76rem; font-weight: 750; }
+      .citation-text { margin: 0; color: #50544c; font-size: 0.82rem; line-height: 1.55; white-space: pre-wrap; }
+      .composer-wrap { padding: 15px 24px 18px; background: linear-gradient(transparent, #f8f8f6 18%); }
+      .composer { width: min(850px, 100%); margin: 0 auto; padding: 14px; border: 1px solid #dfe1d9; border-radius: 15px; background: #fff; box-shadow: 0 8px 26px rgb(35 44 31 / 6%); }
+      textarea { display: block; width: 100%; min-height: 52px; max-height: 160px; padding: 6px 8px; resize: vertical; border: 0; outline: 0; color: #30342d; font: inherit; font-size: 0.92rem; line-height: 1.5; }
+      textarea::placeholder { color: #9b9e95; }
+      .composer-bottom { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 4px 0; }
+      .access-field { width: min(210px, 55%); padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; outline-color: #a8b9a8; font-size: 0.76rem; }
+      #ask-button { display: inline-flex; align-items: center; gap: 8px; padding: 9px 15px; border: 0; border-radius: 9px; background: var(--green); color: white; font-size: 0.82rem; font-weight: 720; cursor: pointer; }
+      #ask-button:hover { background: #34583e; }
+      #ask-button:disabled { cursor: wait; opacity: 0.66; }
+      #status { width: min(850px, 100%); min-height: 20px; margin: 8px auto 0; padding: 0 5px; color: #a13f32; font-size: 0.8rem; }
+      @keyframes appear { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+      @media (max-width: 760px) {
+        body { min-height: 500px; }
+        .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+        aside { max-height: 190px; padding: 12px 16px; border-right: 0; border-bottom: 1px solid var(--line); }
+        .brand { margin: 0 0 12px 2px; font-size: 0.95rem; }
+        .brand-mark { width: 29px; height: 29px; }
+        .side-heading { font-size: 0.72rem; }
+        .upload { width: auto; margin: 8px 0; padding: 9px 11px; font-size: 0.82rem; }
+        .hint, .side-note { display: none; }
+        #source-list { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+        .source-item { padding: 7px; }
+        .topbar { min-height: 55px; padding: 10px 17px; }
+        .model-label { font-size: 0.7rem; }
+        #chat { padding: 24px 18px; }
+        .welcome { margin-top: 8vh; }
+        .composer-wrap { padding: 9px 12px 12px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <aside aria-label="Notebook sources">
+        <div class="brand"><span class="brand-mark" aria-hidden="true">S</span> Sourcebook</div>
+        <div class="side-heading">Sources <span class="source-count" id="source-count">0 / 5</span></div>
+        <label class="upload" for="source-files"><span aria-hidden="true">＋</span> Add sources
+          <input id="source-files" type="file" accept="application/pdf,.pdf" multiple>
+        </label>
+        <p class="hint">Attach up to 5 text-based PDFs. Combined upload limit: 4 MB.</p>
+        <div id="source-list"><p class="empty-sources">Add PDFs to ground your conversation in your own sources.</p></div>
+        <div class="side-note">Sources stay in this browser tab and are reprocessed for each question. Nothing is saved as a durable notebook.</div>
+      </aside>
+
+      <main>
+        <header class="topbar">
+          <div class="notebook-title">New notebook</div>
+          <div class="model-label">Embeddings · CPU &nbsp;|&nbsp; Chat · Ollama Cloud</div>
+        </header>
+        <section class="conversation" aria-label="Conversation">
+          <div id="chat">
+            <div class="welcome" id="welcome">
+              <div class="welcome-icon" aria-hidden="true">✳</div>
+              <h1>What would you like to learn?</h1>
+              <p>Add PDF sources, then ask a question. Answers include excerpts and page citations so you can trace them back to your documents.</p>
+            </div>
+          </div>
+        </section>
+        <div class="composer-wrap">
+          <form id="question-form" class="composer">
+            <textarea id="question" maxlength="1000" placeholder="Ask a question about your sources…" aria-label="Your question" required></textarea>
+            <div class="composer-bottom">
+              <input id="access-code" class="access-field" type="password" autocomplete="current-password" placeholder="Demo access code">
+              <button id="ask-button" type="submit"><span>Ask</span><span aria-hidden="true">↑</span></button>
+            </div>
+          </form>
+          <div id="status" role="status" aria-live="polite"></div>
+        </div>
+      </main>
+    </div>
+    <script>
+      const form = document.querySelector("#question-form");
+      const fileInput = document.querySelector("#source-files");
+      const questionInput = document.querySelector("#question");
+      const accessCodeInput = document.querySelector("#access-code");
+      const askButton = document.querySelector("#ask-button");
+      const status = document.querySelector("#status");
+      const chat = document.querySelector("#chat");
+      const conversation = document.querySelector(".conversation");
+      const sourceList = document.querySelector("#source-list");
+      const sourceCount = document.querySelector("#source-count");
+      const maxPdfBytes = 4 * 1024 * 1024;
+      const maxSources = 5;
+      let sources = [];
+
+      function renderSources() {
+        sourceList.replaceChildren();
+        sourceCount.textContent = `${sources.length} / ${maxSources}`;
+        if (!sources.length) {
+          const empty = document.createElement("p");
+          empty.className = "empty-sources";
+          empty.textContent = "Add PDFs to ground your conversation in your own sources.";
+          sourceList.append(empty);
+          return;
+        }
+
+        for (const [index, file] of sources.entries()) {
+          const item = document.createElement("div");
+          item.className = "source-item";
+          const icon = document.createElement("span");
+          icon.className = "file-icon";
+          icon.textContent = "PDF";
+          const name = document.createElement("span");
+          name.className = "source-name";
+          name.title = file.name;
+          name.textContent = file.name;
+          const remove = document.createElement("button");
+          remove.type = "button";
+          remove.className = "remove-source";
+          remove.setAttribute("aria-label", `Remove ${file.name}`);
+          remove.textContent = "×";
+          remove.addEventListener("click", () => {
+            sources.splice(index, 1);
+            renderSources();
+          });
+          item.append(icon, name, remove);
+          sourceList.append(item);
+        }
+      }
+
+      function addMessage(kind, text, citations = []) {
+        document.querySelector("#welcome")?.remove();
+        const message = document.createElement("article");
+        message.className = `message ${kind}`;
+        const avatar = document.createElement("div");
+        avatar.className = "avatar";
+        avatar.textContent = kind === "user" ? "Y" : "S";
+        const content = document.createElement("div");
+        content.className = "message-content";
+        const title = document.createElement("p");
+        title.className = "message-title";
+        title.textContent = kind === "user" ? "You" : "Sourcebook";
+        const body = document.createElement("div");
+        body.className = "message-body";
+        body.textContent = text;
+        content.append(title, body);
+
+        if (citations.length) {
+          const details = document.createElement("details");
+          const summary = document.createElement("summary");
+          summary.textContent = `Sources used (${citations.length})`;
+          details.append(summary);
+          for (const citation of citations) {
+            const item = document.createElement("div");
+            item.className = "citation";
+            const label = document.createElement("p");
+            label.className = "citation-label";
+            label.textContent = citation.citation;
+            const excerpt = document.createElement("p");
+            excerpt.className = "citation-text";
+            excerpt.textContent = citation.text;
+            item.append(label, excerpt);
+            details.append(item);
+          }
+          content.append(details);
+        }
+
+        message.append(avatar, content);
+        chat.append(message);
+        conversation.scrollTop = conversation.scrollHeight;
+      }
+
+      fileInput.addEventListener("change", () => {
+        status.textContent = "";
+        const names = new Set(sources.map((file) => file.name));
+        for (const file of fileInput.files) {
+          if (!file.name.toLowerCase().endsWith(".pdf")) {
+            status.textContent = "Attach PDF files only.";
+          } else if (names.has(file.name)) {
+            status.textContent = `A source named "${file.name}" is already attached.`;
+          } else if (sources.length >= maxSources) {
+            status.textContent = `Attach no more than ${maxSources} sources.`;
+          } else {
+            sources.push(file);
+            names.add(file.name);
+          }
+        }
+        fileInput.value = "";
+        renderSources();
+      });
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        status.textContent = "";
+        const question = questionInput.value.trim();
+        if (!sources.length) {
+          status.textContent = "Add at least one PDF source before asking a question.";
+          return;
+        }
+        if (!question) {
+          status.textContent = "Enter a question.";
+          return;
+        }
+        const totalBytes = sources.reduce((total, file) => total + file.size, 0);
+        if (totalBytes > maxPdfBytes) {
+          status.textContent = "The combined PDF size must be 4 MB or less.";
+          return;
+        }
+
+        addMessage("user", question);
+        askButton.disabled = true;
+        askButton.querySelector("span").textContent = "Searching…";
+        const data = new FormData();
+        data.append("question", question);
+        for (const source of sources) data.append("sources", source);
+
+        try {
+          const headers = {};
+          if (accessCodeInput.value) {
+            headers["X-App-Access-Code"] = accessCodeInput.value;
+          }
+          const response = await fetch("/api/ask", { method: "POST", headers, body: data });
+          const result = await response.json();
+          if (!response.ok) {
+            throw new Error(result.detail || "The request failed. Please try again.");
+          }
+          addMessage("assistant", result.answer, result.sources);
+          questionInput.value = "";
+        } catch (error) {
+          status.textContent = error instanceof Error ? error.message : "Unable to reach the service.";
+        } finally {
+          askButton.disabled = false;
+          askButton.querySelector("span").textContent = "Ask";
+          questionInput.focus();
+        }
+      });
+
+      renderSources();
+    </script>
+  </body>
+</html>

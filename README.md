@@ -1,65 +1,74 @@
-# Document QA Assistant
+# Sourcebook — PDF Chat on Vercel
 
-A Streamlit prototype for asking questions about a PDF. It extracts text, splits it into chunks, creates embeddings, retrieves relevant chunks from FAISS, and sends that context to a chat model.
+Sourcebook is a Flask PDF question-answering app with a source sidebar and a scrolling, citation-aware conversation. Attach up to five text-based PDFs, ask questions grounded in those sources, and inspect the page excerpts used for each answer.
 
-## Current features
+## How it works
 
-- Upload and process one text-based PDF at a time.
-- Preserve one-based PDF page numbers and source filenames on indexed chunks.
-- Configure chunk size, overlap, and the number of retrieved chunks.
-- Ask questions grounded in retrieved document text.
-- Review retrieved text excerpts with source filename and page references.
-- Keep a question-and-answer history for the current document.
-- Replace a document or change chunk settings without accidentally reusing a stale index.
+1. The browser sends the attached PDF sources and question to the Flask API.
+2. PyPDF extracts page text and the app creates overlapping, page-aware text chunks.
+3. FastEmbed generates chunk and question embeddings with a small CPU model (`BAAI/bge-small-en-v1.5` by default).
+4. A LangGraph workflow ranks chunks by cosine similarity and routes to answer generation when relevant passages are found, or to a no-match response otherwise.
+5. Ollama Cloud generates an answer from the retrieved excerpts. The UI displays the answer and its source pages.
 
-## Source references and limitations
+The embedding model runs on CPU; no GPU is needed. Ollama Cloud is used for chat generation only. Embeddings are computed on each question because Vercel Functions do not provide durable per-user memory or document storage.
 
-Text is extracted page by page. Each indexed chunk retains its source filename, one-based PDF page number, chunk ID, and character start offset. The app displays the retrieved excerpt with its source filename and page number; references come from retrieved metadata, not model-generated page numbers.
+## Features and limits
 
-Page references identify the source PDF page from which extracted text came. They are not highlighted quotations or proof that a scanned page was OCR-processed. Scanned/image-only PDFs are rejected with a readable-text message; OCR is not implemented.
+- Up to 5 text-based PDF sources per question, with a combined size limit of 4 MB. Vercel Functions have a 4.5 MB total request-body limit, including multipart form overhead.
+- Page-specific citations for PDF excerpts.
+- CPU-based embeddings; configure the model using `EMBEDDING_MODEL`.
+- LangGraph retrieval and answer/no-match routing.
+- Ollama Cloud chat model configured by `OLLAMA_CHAT_MODEL` (default `gemma4:31b`).
+- Server-side access-code protection; Vercel deployments fail closed unless `APP_ACCESS_CODE` is configured.
+- Source files stay in browser memory and are resent with each question. They are not retained as a notebook or durable vector index.
+- Scanned/image-only PDFs are not OCR-processed. DOCX and other formats are not supported by this app.
+
+FastEmbed downloads its selected embedding model when it is first initialized. On Vercel, model files may need to be downloaded again in a new function instance; this can increase cold-start time. A production deployment should use durable source storage and a persistent vector index, or a managed embedding service.
 
 ## Run locally
 
-Use Python 3.10 or newer. Install the packages in `requirements.txt`, then provide an OpenAI API key through an environment variable or a local `.env` file:
-
-```text
-OPENAI_API_KEY=your_api_key
-```
-
-Start the app from the project directory:
+Python 3.12 is recommended. Create a `.env` file from `.env.example`, set a valid Ollama Cloud API key, and install dependencies:
 
 ```powershell
+Copy-Item .env.example .env
 python -m pip install -r requirements.txt
-streamlit run app.py
+flask --app app run --debug
 ```
 
-Do not commit `.env` or API keys. For hosted deployments, configure the key using the host's secret-management feature.
+Open `http://127.0.0.1:5000`. The local app does not require an access code unless `APP_ACCESS_CODE` is set. The first question may take longer while FastEmbed downloads the embedding model. Keep `.env` private; never commit API keys.
 
-## Project layout
+## Deploy on Vercel
 
-```text
-app.py                         Streamlit application and RAG workflow
-document_processing.py         PDF extraction, page-aware chunking, citations
-requirements.txt               Python dependencies
-tests/                          Focused document-processing and app-flow tests
-documents/                     Sample PDF and DOCX files
-notebooks/Untitled.ipynb       Separate PDF/DOCX and Ollama experiment
-```
+Vercel supports Flask through its Python runtime. The root `app.py` exports a Flask object named `app`; `vercel.json` includes the static UI and excludes tests and sample documents from the function bundle.
 
-The notebook is separate from the Streamlit app. The app supports PDF upload only; DOCX ingestion and Ollama are not app features. The notebook uses OpenAI embeddings (and therefore needs `OPENAI_API_KEY`) together with a local Ollama server and the `llama3` model. Start Ollama and run `ollama pull llama3` before executing the model/Q&A cells.
+1. Push the repository to GitHub and import it as a Vercel project.
+2. In Vercel **Settings → Environment Variables**, configure:
+   - `OLLAMA_API_KEY`: your Ollama Cloud API key.
+   - `APP_ACCESS_CODE`: a long, unique code to restrict access to the model-backed API.
+   - `OLLAMA_CHAT_MODEL`: optional; defaults to `gemma4:31b`.
+   - `EMBEDDING_MODEL`: optional FastEmbed model name; defaults to `BAAI/bge-small-en-v1.5`.
+3. Redeploy after changing environment variables.
+4. Open the deployment URL, enter the access code, attach one or more small text-based PDFs, and ask a question.
 
-## Verify locally
+Confirm that the selected Ollama chat model is available to your account and that your deployment can download the FastEmbed model. The app does not send the Ollama API key to the browser. Do not publish the access code.
 
-Run the focused tests:
+## Verify
 
 ```powershell
 python -m unittest discover -s tests -v
 ```
 
-Then run `streamlit run app.py` and verify a sample PDF, a second replacement PDF, and a blank/image-only PDF. After indexing, change chunk size or overlap and confirm that the app asks you to rebuild the index before answering with it.
+Tests use mocked embeddings and Ollama responses; they do not require credentials or make paid inference calls. A live model request and Vercel deployment must be tested separately.
 
-## Portfolio presentation
+## Project layout
 
-Describe this as a document-question-answering prototype built with Python, Streamlit, LangChain, FAISS, and OpenAI. A transparent demo can show uploading a text PDF, asking a question, and inspecting page-referenced excerpts. Avoid claiming OCR support or highlighted quotations.
-
-Before publishing a live demo, verify the install from a clean environment, test a replacement upload and an unreadable/scanned PDF, and confirm API secrets are configured outside the source code.
+```text
+app.py                         Flask routes, LangGraph workflow, Ollama Cloud chat
+document_processing.py         PDF extraction, page-aware chunks, vector retrieval
+static/index.html              Source sidebar and scrolling chat interface
+vercel.json                    Vercel function configuration
+requirements.txt               Runtime dependencies
+tests/                         API, workflow, and document-processing tests
+notebooks/Untitled.ipynb       Separate, non-deployed experiment
+documents/                     Sample PDFs, excluded from the Vercel bundle
+```
