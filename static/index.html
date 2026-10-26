@@ -241,6 +241,7 @@
       const sourceCount = document.querySelector("#source-count");
       const maxPdfBytes = 25 * 1024 * 1024;
       const maxSources = 5;
+      const API_BASE_URL = "http://localhost:5000"; // CHANGE THIS to your Render backend URL after deploy
       let sources = [];
 
       function renderSources() {
@@ -402,7 +403,7 @@
         for (const source of sources) data.append("sources", source);
 
         try {
-          const response = await fetch("/api/ask", { method: "POST", body: data, signal: abortController.signal });
+          const response = await fetch(`${API_BASE_URL}/api/ask`, { method: "POST", body: data, signal: abortController.signal });
           const result = await response.json();
           if (!response.ok) {
             throw new Error(result.detail || "The request failed. Please try again.");

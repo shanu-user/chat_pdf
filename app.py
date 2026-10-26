@@ -2,13 +2,13 @@ import hmac
 import logging
 import os
 from functools import lru_cache
-from pathlib import Path
 from typing import TypedDict
 
 import httpx
 from dotenv import load_dotenv
 from fastembed import TextEmbedding
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request
+from flask_cors import CORS
 from werkzeug.exceptions import RequestEntityTooLarge
 from langgraph.graph import END, START, StateGraph
 from pypdf.errors import PdfReadError
@@ -27,8 +27,8 @@ logger = logging.getLogger(__name__)
 OLLAMA_API_URL = "https://ollama.com"
 CHAT_MODEL = os.getenv("OLLAMA_CHAT_MODEL", "gemma4:31b")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
-# Vercel Functions have ~4.5 MB request body limit; use smaller limits on Vercel, larger locally
-if os.getenv("VERCEL"):
+# Render/Vercel Functions have ~4.5 MB request body limit; use smaller limits on serverless, larger locally
+if os.getenv("VERCEL") or os.getenv("RENDER"):
     MAX_SOURCE_BYTES = 4 * 1024 * 1024
     MAX_REQUEST_BYTES = 4_250_000
 else:
@@ -37,7 +37,11 @@ else:
 MAX_SOURCES = 5
 MAX_CHUNKS = 50
 
-app = Flask(__name__, static_folder="static")
+app = Flask(__name__)
+
+# CORS for split frontend/backend deployment
+frontend_url = os.getenv("FRONTEND_URL", "*")
+CORS(app, origins=[frontend_url] if frontend_url != "*" else "*", supports_credentials=True)
 app.config["MAX_CONTENT_LENGTH"] = MAX_REQUEST_BYTES
 
 
@@ -180,7 +184,7 @@ def request_too_large(_: RequestEntityTooLarge):
 
 @app.get("/")
 def index():
-    return send_from_directory(Path(app.root_path) / "static", "index.html")
+    return jsonify(status="ok", service="sourcebook-backend")
 
 
 @app.get("/api/health")
