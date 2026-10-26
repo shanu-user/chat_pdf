@@ -27,8 +27,8 @@ logger = logging.getLogger(__name__)
 OLLAMA_API_URL = "https://ollama.com"
 CHAT_MODEL = os.getenv("OLLAMA_CHAT_MODEL", "gemma4:31b")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
-MAX_SOURCE_BYTES = 4 * 1024 * 1024
-MAX_REQUEST_BYTES = 4_250_000
+MAX_SOURCE_BYTES = 25 * 1024 * 1024
+MAX_REQUEST_BYTES = 27 * 1024 * 1024
 MAX_SOURCES = 5
 MAX_CHUNKS = 250
 
@@ -70,22 +70,7 @@ def get_ollama_api_key() -> str:
 
 
 def verify_access_code(access_code: str | None) -> tuple[str, int] | None:
-    expected_code = os.getenv("APP_ACCESS_CODE")
-    if not expected_code:
-        if os.getenv("VERCEL"):
-            return (
-                jsonify(
-                    {
-                        "detail": (
-                            "The deployment is not protected. Configure APP_ACCESS_CODE."
-                        )
-                    }
-                ),
-                503,
-            )
-        return None
-    if not access_code or not hmac.compare_digest(access_code, expected_code):
-        return jsonify({"detail": "Enter the correct access code."}), 401
+    # Access code protection removed per request
     return None
 
 
@@ -184,7 +169,7 @@ qa_graph = build_qa_graph()
 
 @app.errorhandler(RequestEntityTooLarge)
 def request_too_large(_: RequestEntityTooLarge):
-    return jsonify(detail="The combined request exceeds the 4 MB source upload limit."), 413
+    return jsonify(detail="The combined request exceeds the 25 MB source upload limit."), 413
 
 
 @app.get("/")
@@ -239,7 +224,7 @@ def ask_sources():
                 return (
                     jsonify(
                         detail=(
-                            "Attached PDFs exceed the 4 MB combined demo limit."
+                            "Attached PDFs exceed the 25 MB combined limit."
                         )
                     ),
                     413,

@@ -189,7 +189,7 @@ class AppTests(unittest.TestCase):
         response = self.post_sources(sources=[("large.pdf", too_large)])
 
         self.assertEqual(response.status_code, 413)
-        self.assertIn("4 MB combined", response.json["detail"])
+        self.assertIn("25 MB combined", response.json["detail"])
 
     def test_rejects_duplicate_source_names(self):
         response = self.post_sources(
