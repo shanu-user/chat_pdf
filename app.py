@@ -35,7 +35,7 @@ else:
     MAX_SOURCE_BYTES = 25 * 1024 * 1024
     MAX_REQUEST_BYTES = 27 * 1024 * 1024
 MAX_SOURCES = 5
-MAX_CHUNKS = 250
+MAX_CHUNKS = 50
 
 app = Flask(__name__, static_folder="static")
 app.config["MAX_CONTENT_LENGTH"] = MAX_REQUEST_BYTES
@@ -108,7 +108,7 @@ def generate_answer(question: str, retrieved: list[dict[str, str | int]]) -> str
             f"{OLLAMA_API_URL}/api/chat",
             headers={"Authorization": f"Bearer {get_ollama_api_key()}"},
             json=payload,
-            timeout=httpx.Timeout(240.0, connect=15.0),
+            timeout=httpx.Timeout(300.0, connect=30.0),
         )
         response.raise_for_status()
     except httpx.HTTPStatusError as error:
