@@ -27,8 +27,13 @@ logger = logging.getLogger(__name__)
 OLLAMA_API_URL = "https://ollama.com"
 CHAT_MODEL = os.getenv("OLLAMA_CHAT_MODEL", "gemma4:31b")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
-MAX_SOURCE_BYTES = 25 * 1024 * 1024
-MAX_REQUEST_BYTES = 27 * 1024 * 1024
+# Vercel Functions have ~4.5 MB request body limit; use smaller limits on Vercel, larger locally
+if os.getenv("VERCEL"):
+    MAX_SOURCE_BYTES = 4 * 1024 * 1024
+    MAX_REQUEST_BYTES = 4_250_000
+else:
+    MAX_SOURCE_BYTES = 25 * 1024 * 1024
+    MAX_REQUEST_BYTES = 27 * 1024 * 1024
 MAX_SOURCES = 5
 MAX_CHUNKS = 250
 
@@ -169,7 +174,8 @@ qa_graph = build_qa_graph()
 
 @app.errorhandler(RequestEntityTooLarge)
 def request_too_large(_: RequestEntityTooLarge):
-    return jsonify(detail="The combined request exceeds the 25 MB source upload limit."), 413
+    mb = MAX_SOURCE_BYTES // (1024 * 1024)
+    return jsonify(detail=f"The combined request exceeds the {mb} MB source upload limit."), 413
 
 
 @app.get("/")
@@ -221,10 +227,11 @@ def ask_sources():
             source_bytes = source.stream.read(MAX_SOURCE_BYTES + 1)
             total_bytes += len(source_bytes)
             if total_bytes > MAX_SOURCE_BYTES:
+                mb = MAX_SOURCE_BYTES // (1024 * 1024)
                 return (
                     jsonify(
                         detail=(
-                            "Attached PDFs exceed the 25 MB combined limit."
+                            f"Attached PDFs exceed the {mb} MB combined limit."
                         )
                     ),
                     413,

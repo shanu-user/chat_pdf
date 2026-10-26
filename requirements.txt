@@ -4,3 +4,4 @@ httpx==0.28.1
 langgraph==1.2.17
 pypdf==5.4.0
 python-dotenv==1.0.1
+gunicorn==21.2.0
