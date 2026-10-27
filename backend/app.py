@@ -34,14 +34,19 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
+# Limit OpenMP / MKL threads to reduce memory on Render free tier
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
 OLLAMA_API_URL = "https://ollama.com"
 CHAT_MODEL = os.getenv("OLLAMA_CHAT_MODEL", "gemma4:31b")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
 MAX_SOURCE_BYTES = 25 * 1024 * 1024
 MAX_REQUEST_BYTES = 27 * 1024 * 1024
 MAX_SOURCES = 5
-MAX_CHUNKS = 15
-RETRIEVAL_K = 5
+MAX_CHUNKS = 5
+RETRIEVAL_K = 3
 RETRIEVAL_MIN_SCORE = 0.2
 
 app = Flask(__name__)
