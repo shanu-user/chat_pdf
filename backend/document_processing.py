@@ -1,15 +1,43 @@
+import hashlib
+import logging
 import math
+import os
 from dataclasses import dataclass
+from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
+from typing import Optional
+from uuid import uuid4
 
+import chromadb
 from pypdf import PdfReader
+
+
+logger = logging.getLogger(__name__)
+
+CHROMA_PERSIST_DIR = os.getenv("CHROMA_PERSIST_DIR", "./chroma_data")
+CHROMA_COLLECTION_NAME = os.getenv("CHROMA_COLLECTION_NAME", "pdf_chunks")
+MAX_CHUNK_SIZE_CHARS = 1000
+MAX_CHUNK_OVERLAP_CHARS = 150
 
 
 @dataclass
 class TextChunk:
     page_content: str
     metadata: dict[str, str | int]
+
+
+@dataclass
+class DocumentRecord:
+    document_id: str
+    source_name: str
+    content_hash: str
+    num_chunks: int
+    num_pages: int
+
+
+def compute_content_hash(pdf_bytes: bytes) -> str:
+    return hashlib.sha256(pdf_bytes).hexdigest()
 
 
 def extract_pdf_pages(pdf_bytes: bytes, source_name: str) -> list[dict[str, str | int]]:
@@ -31,8 +59,8 @@ def extract_pdf_pages(pdf_bytes: bytes, source_name: str) -> list[dict[str, str 
 
 def chunk_pages(
     pages: list[dict[str, str | int]],
-    chunk_size: int,
-    chunk_overlap: int,
+    chunk_size: int = MAX_CHUNK_SIZE_CHARS,
+    chunk_overlap: int = MAX_CHUNK_OVERLAP_CHARS,
 ) -> list[TextChunk]:
     if chunk_size <= 0:
         raise ValueError("Chunk size must be greater than zero.")
@@ -83,49 +111,139 @@ def chunk_pages(
     return chunks
 
 
-def retrieve_by_embeddings(
+@lru_cache(maxsize=1)
+def get_chroma_client() -> chromadb.PersistentClient:
+    return chromadb.PersistentClient(path=CHROMA_PERSIST_DIR)
+
+
+@lru_cache(maxsize=1)
+def get_chroma_collection():
+    client = get_chroma_client()
+    return client.get_or_create_collection(name=CHROMA_COLLECTION_NAME)
+
+
+def document_exists_by_hash(content_hash: str) -> bool:
+    try:
+        collection = get_chroma_collection()
+        results = collection.get(
+            where={"content_hash": content_hash},
+            limit=1,
+        )
+        return bool(results and results.get("ids") and len(results["ids"]) > 0)
+    except Exception as error:
+        logger.warning("Failed to check document existence: %s", error)
+        return False
+
+
+def get_document_by_hash(content_hash: str):
+    try:
+        collection = get_chroma_collection()
+        results = collection.get(where={"content_hash": content_hash}, limit=1)
+        if not results or not results.get("metadatas"):
+            return None
+        metadata = results["metadatas"][0]
+        doc_id = str(metadata.get("document_id", ""))
+        return {
+            "document_id": doc_id,
+            "source_name": str(metadata.get("source", "Unknown")),
+            "content_hash": str(metadata.get("content_hash", "")),
+            "num_chunks": len(results.get("ids", [])),
+            "num_pages": len(
+                set(
+                    int(m.get("page_number", 0))
+                    for m in results.get("metadatas", [])
+                    if m.get("page_number") is not None
+                )
+            ),
+        }
+    except Exception as error:
+        logger.warning("Failed to get document by hash: %s", error)
+        return None
+
+
+def store_document_chunks(
+    document_id: str,
+    source_name: str,
+    content_hash: str,
     chunks: list[TextChunk],
     embeddings: list[list[float]],
-    k: int,
+) -> None:
+    if len(chunks) != len(embeddings):
+        raise ValueError("Chunk count and embedding count must match.")
+
+    collection = get_chroma_collection()
+    ids = [f"{document_id}:{chunk.metadata['chunk_id']}" for chunk in chunks]
+    documents = [chunk.page_content for chunk in chunks]
+    metadatas = [
+        {
+            "document_id": document_id,
+            "source": chunk.metadata["source"],
+            "page_number": int(chunk.metadata["page_number"]),
+            "chunk_id": int(chunk.metadata["chunk_id"]),
+            "start_index": int(chunk.metadata["start_index"]),
+            "content_hash": content_hash,
+        }
+        for chunk in chunks
+    ]
+    collection.add(ids=ids, documents=documents, metadatas=metadatas, embeddings=embeddings)
+
+
+def retrieve_chunks(
+    document_ids: str,
+    query_embedding: list[float],
+    k: int = 5,
     minimum_score: float = 0.2,
 ) -> list[dict[str, str | int]]:
     if k <= 0:
         raise ValueError("Result count must be positive.")
-    if len(embeddings) != len(chunks) + 1:
-        raise ValueError("Expected one embedding per chunk and one for the query.")
-    if not chunks:
+
+    # Support comma-separated document IDs for multi-document queries
+    id_list = [d.strip() for d in document_ids.split(",") if d.strip()]
+    if not id_list:
         return []
 
-    query_embedding = embeddings[-1]
-    query_norm = math.sqrt(sum(value * value for value in query_embedding))
-    if query_norm == 0:
-        return []
+    collection = get_chroma_collection()
+    all_scored = []
 
-    scored_chunks = []
-    for index, chunk in enumerate(chunks):
-        embedding = embeddings[index]
-        if len(embedding) != len(query_embedding):
-            raise ValueError("Chunk and query embeddings have different dimensions.")
-        embedding_norm = math.sqrt(sum(value * value for value in embedding))
-        if embedding_norm == 0:
+    for doc_id in id_list:
+        results = collection.query(
+            query_embeddings=[query_embedding],
+            where={"document_id": doc_id},
+            n_results=k,
+            include=["documents", "metadatas", "distances"],
+        )
+
+        if not results or not results.get("ids") or len(results["ids"][0]) == 0:
             continue
 
-        score = sum(
-            value * query_value
-            for value, query_value in zip(embedding, query_embedding)
-        ) / (embedding_norm * query_norm)
-        if score >= minimum_score:
-            scored_chunks.append((score, index, chunk))
+        query_norm = math.sqrt(sum(v * v for v in query_embedding))
+        if query_norm == 0:
+            continue
 
-    scored_chunks.sort(key=lambda item: (-item[0], item[1]))
-    return [
-        {
-            "citation": format_citation(chunk.metadata),
-            "text": chunk.page_content,
-            "chunk_id": int(chunk.metadata["chunk_id"]),
-        }
-        for _, _, chunk in scored_chunks[:k]
-    ]
+        ids = results["ids"][0]
+        documents = results["documents"][0] or []
+        metadatas = results["metadatas"][0] or []
+        distances = results["distances"][0] or []
+
+        for doc_id, text, metadata, distance in zip(ids, documents, metadatas, distances):
+            if metadata is None:
+                continue
+            similarity = 1.0 - float(distance)
+            if similarity < minimum_score:
+                continue
+
+            all_scored.append(
+                {
+                    "citation": format_citation(metadata),
+                    "text": text,
+                    "chunk_id": int(metadata.get("chunk_id", 0)),
+                    "similarity": similarity,
+                    "document_id": metadata.get("document_id", doc_id),
+                }
+            )
+
+    all_scored.sort(key=lambda item: (-item["similarity"], item["chunk_id"]))
+    return all_scored[:k]
 
 
 def format_citation(metadata: dict[str, str | int]) -> str:
@@ -137,3 +255,34 @@ def format_citation(metadata: dict[str, str | int]) -> str:
     if isinstance(page_number, int):
         return f"{source}, page {page_number}"
     return source
+
+
+def delete_document(document_id: str) -> int:
+    """Delete all chunks for a document. Returns number of deleted chunks."""
+    collection = get_chroma_collection()
+    results = collection.get(where={"document_id": document_id})
+    if not results or not results.get("ids"):
+        return 0
+    collection.delete(ids=results["ids"])
+    return len(results["ids"])
+
+
+def get_document_info(document_id: str) -> Optional[DocumentRecord]:
+    collection = get_chroma_collection()
+    results = collection.get(where={"document_id": document_id}, limit=1)
+    if not results or not results.get("metadatas"):
+        return None
+    metadata = results["metadatas"][0]
+    return DocumentRecord(
+        document_id=document_id,
+        source_name=str(metadata.get("source", "Unknown")),
+        content_hash=str(metadata.get("content_hash", "")),
+        num_chunks=len(results.get("ids", [])),
+        num_pages=len(
+            set(
+                int(m.get("page_number", 0))
+                for m in results.get("metadatas", [])
+                if m.get("page_number") is not None
+            )
+        ),
+    )

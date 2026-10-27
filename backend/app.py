@@ -1,8 +1,11 @@
+import hashlib
 import hmac
 import logging
 import os
+import time
 from functools import lru_cache
 from typing import TypedDict
+from uuid import uuid4
 
 import httpx
 from dotenv import load_dotenv
@@ -16,8 +19,15 @@ from pypdf.errors import PdfReadError
 from document_processing import (
     TextChunk,
     chunk_pages,
+    compute_content_hash,
+    delete_document,
+    document_exists_by_hash,
     extract_pdf_pages,
-    retrieve_by_embeddings,
+    get_chroma_collection,
+    get_chroma_client,
+    get_document_by_hash,
+    retrieve_chunks,
+    store_document_chunks,
 )
 
 load_dotenv()
@@ -27,21 +37,21 @@ logger = logging.getLogger(__name__)
 OLLAMA_API_URL = "https://ollama.com"
 CHAT_MODEL = os.getenv("OLLAMA_CHAT_MODEL", "gemma4:31b")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
-# Vercel Functions have ~4.5 MB request body limit; Render Web Service allows larger uploads
-if os.getenv("VERCEL"):
-    MAX_SOURCE_BYTES = 4 * 1024 * 1024
-    MAX_REQUEST_BYTES = 4_250_000
-else:
-    MAX_SOURCE_BYTES = 25 * 1024 * 1024
-    MAX_REQUEST_BYTES = 27 * 1024 * 1024
+MAX_SOURCE_BYTES = 25 * 1024 * 1024
+MAX_REQUEST_BYTES = 27 * 1024 * 1024
 MAX_SOURCES = 5
-MAX_CHUNKS = 50
+MAX_CHUNKS = 15
+RETRIEVAL_K = 5
+RETRIEVAL_MIN_SCORE = 0.2
 
 app = Flask(__name__)
 
 # CORS for split frontend/backend deployment
-frontend_url = os.getenv("FRONTEND_URL", "*")
-CORS(app, origins=[frontend_url] if frontend_url != "*" else "*", supports_credentials=True)
+frontend_url = os.getenv("FRONTEND_URL", "")
+if frontend_url:
+    CORS(app, origins=[frontend_url], supports_credentials=True)
+else:
+    CORS(app, supports_credentials=True)
 app.config["MAX_CONTENT_LENGTH"] = MAX_REQUEST_BYTES
 
 
@@ -55,7 +65,7 @@ class ConfigurationError(Exception):
 
 class QAState(TypedDict):
     question: str
-    chunks: list[TextChunk]
+    document_id: str
     retrieved: list[dict[str, str | int]]
     answer: str
 
@@ -69,6 +79,10 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
     return [vector.tolist() for vector in get_embedder().embed(texts)]
 
 
+def embed_query(question: str) -> list[float]:
+    return embed_texts([question])[0]
+
+
 def get_ollama_api_key() -> str:
     api_key = os.getenv("OLLAMA_API_KEY")
     if not api_key:
@@ -79,7 +93,11 @@ def get_ollama_api_key() -> str:
 
 
 def verify_access_code(access_code: str | None) -> tuple[str, int] | None:
-    # Access code protection removed per request
+    expected_code = os.getenv("APP_ACCESS_CODE")
+    if not expected_code:
+        return None
+    if not access_code or not hmac.compare_digest(access_code, expected_code):
+        return jsonify({"detail": "Enter the correct access code."}), 401
     return None
 
 
@@ -137,11 +155,15 @@ def generate_answer(question: str, retrieved: list[dict[str, str | int]]) -> str
 
 def build_qa_graph():
     def retrieve_node(state: QAState) -> dict[str, list[dict[str, str | int]]]:
-        texts = [chunk.page_content for chunk in state["chunks"]]
-        embeddings = embed_texts([*texts, state["question"]])
+        question = state["question"]
+        document_id = state["document_id"]
+        query_embedding = embed_query(question)
         return {
-            "retrieved": retrieve_by_embeddings(
-                state["chunks"], embeddings, k=5
+            "retrieved": retrieve_chunks(
+                document_id,
+                query_embedding,
+                k=RETRIEVAL_K,
+                minimum_score=RETRIEVAL_MIN_SCORE,
             )
         }
 
@@ -189,23 +211,22 @@ def index():
 
 @app.get("/api/health")
 def health():
-    return jsonify(status="ok")
+    try:
+        get_chroma_client()
+        chroma_status = "ok"
+    except Exception:
+        chroma_status = "error"
+    return jsonify(status="ok", chroma=chroma_status)
 
 
-@app.post("/api/ask")
-def ask_sources():
+@app.post("/api/upload")
+def upload_sources():
     access_error = verify_access_code(
         request.headers.get("X-App-Access-Code")
         or request.form.get("access_code")
     )
     if access_error:
         return access_error
-
-    question = request.form.get("question", "").strip()
-    if not question:
-        return jsonify(detail="Enter a question."), 422
-    if len(question) > 1000:
-        return jsonify(detail="Questions must be 1,000 characters or fewer."), 422
 
     source_files = [
         source
@@ -221,7 +242,7 @@ def ask_sources():
     if len(set(filenames)) != len(filenames):
         return jsonify(detail="Each attached PDF must have a different filename."), 422
 
-    pages: list[dict[str, str | int]] = []
+    results = []
     total_bytes = 0
     try:
         for source in source_files:
@@ -234,40 +255,205 @@ def ask_sources():
                 mb = MAX_SOURCE_BYTES // (1024 * 1024)
                 return (
                     jsonify(
+                        detail=f"Attached PDFs exceed the {mb} MB combined limit."
+                    ),
+                    413,
+                )
+
+            content_hash = compute_content_hash(source_bytes)
+
+            if document_exists_by_hash(content_hash):
+                existing = get_document_by_hash(content_hash)
+                if existing:
+                    results.append(
+                        {
+                            "filename": source.filename,
+                            "document_id": existing["document_id"],
+                            "status": "already_indexed",
+                            "chunks": existing["num_chunks"],
+                            "pages": existing["num_pages"],
+                        }
+                    )
+                    continue
+
+            t0 = time.time()
+            pages = extract_pdf_pages(source_bytes, source.filename)
+            t1 = time.time()
+
+            chunks = chunk_pages(pages)
+            if not chunks:
+                return jsonify(detail="No readable text found in this PDF."), 422
+            if len(chunks) > MAX_CHUNKS:
+                return (
+                    jsonify(
                         detail=(
-                            f"Attached PDFs exceed the {mb} MB combined limit."
+                            f"The attached PDFs create {len(chunks)} chunks; "
+                            f"the demo supports up to {MAX_CHUNKS}."
                         )
                     ),
                     413,
                 )
-            pages.extend(extract_pdf_pages(source_bytes, source.filename))
+
+            t2 = time.time()
+            chunk_texts = [chunk.page_content for chunk in chunks]
+            embeddings = embed_texts(chunk_texts)
+            t3 = time.time()
+
+            document_id = str(uuid4())
+            store_document_chunks(
+                document_id=document_id,
+                source_name=source.filename,
+                content_hash=content_hash,
+                chunks=chunks,
+                embeddings=embeddings,
+            )
+            t4 = time.time()
+
+            logger.info(
+                "Indexed document %s: extract=%.2fs chunk=%.2fs embed=%.2fs store=%.2fs chunks=%d",
+                document_id,
+                t1 - t0,
+                t2 - t1,
+                t3 - t2,
+                t4 - t3,
+                len(chunks),
+            )
+
+            results.append(
+                {
+                    "filename": source.filename,
+                    "document_id": document_id,
+                    "status": "indexed",
+                    "chunks": len(chunks),
+                    "pages": len(set(p["page_number"] for p in pages)),
+                }
+            )
     except (PdfReadError, ValueError) as error:
         return jsonify(detail=str(error)), 422
     finally:
         for source in source_files:
             source.close()
 
-    chunks = chunk_pages(pages, chunk_size=1000, chunk_overlap=150)
-    if not chunks:
-        return jsonify(detail="No readable text found in the attached PDFs."), 422
-    if len(chunks) > MAX_CHUNKS:
-        return (
-            jsonify(
-                detail=(
-                    f"The attached PDFs create {len(chunks)} chunks; "
-                    f"the demo supports up to {MAX_CHUNKS}."
+    return jsonify(documents=results)
+
+
+def get_document_by_hash(content_hash: str):
+    try:
+        collection = get_chroma_collection()
+        results = collection.get(where={"content_hash": content_hash}, limit=1)
+        if not results or not results.get("metadatas"):
+            return None
+        metadata = results["metadatas"][0]
+        doc_id = str(metadata.get("document_id", ""))
+        return {
+            "document_id": doc_id,
+            "num_chunks": len(results.get("ids", [])),
+            "num_pages": len(
+                set(
+                    int(m.get("page_number", 0))
+                    for m in results.get("metadatas", [])
+                    if m.get("page_number") is not None
                 )
             ),
-            413,
-        )
+        }
+    except Exception:
+        return None
+
+
+@app.post("/api/ask")
+def ask_sources():
+    t_total_start = time.time()
+
+    access_error = verify_access_code(
+        request.headers.get("X-App-Access-Code")
+        or request.form.get("access_code")
+    )
+    if access_error:
+        return access_error
+
+    question = request.form.get("question", "").strip()
+    if not question:
+        return jsonify(detail="Enter a question."), 422
+    if len(question) > 1000:
+        return jsonify(detail="Questions must be 1,000 characters or fewer."), 422
+
+    document_id = request.form.get("document_id", "").strip()
+    if not document_id:
+        return jsonify(detail="document_id is required. Upload a document first."), 422
 
     try:
         result = qa_graph.invoke(
-            {"question": question, "chunks": chunks, "retrieved": [], "answer": ""}
+            {
+                "question": question,
+                "document_id": document_id,
+                "retrieved": [],
+                "answer": "",
+            }
         )
     except ConfigurationError as error:
         return jsonify(detail=str(error)), 503
     except OllamaCloudError as error:
         return jsonify(detail=str(error)), 502
 
-    return jsonify(answer=result["answer"], sources=result["retrieved"])
+    t_total_end = time.time()
+    logger.info(
+        "QA total=%.2fs question=%s document_id=%s retrieved=%d",
+        t_total_end - t_total_start,
+        question[:80],
+        document_id,
+        len(result.get("retrieved", [])),
+    )
+
+    return jsonify(
+        answer=result["answer"],
+        sources=result.get("retrieved", []),
+    )
+
+
+@app.get("/api/documents")
+def list_documents():
+    access_error = verify_access_code(
+        request.headers.get("X-App-Access-Code")
+        or request.form.get("access_code")
+    )
+    if access_error:
+        return access_error
+    try:
+        collection = get_chroma_collection()
+        all_data = collection.get()
+        if not all_data or not all_data.get("metadatas"):
+            return jsonify(documents=[])
+        docs = {}
+        for metadata in all_data["metadatas"]:
+            doc_id = str(metadata.get("document_id", ""))
+            if doc_id not in docs:
+                docs[doc_id] = {
+                    "document_id": doc_id,
+                    "source": str(metadata.get("source", "Unknown")),
+                    "content_hash": str(metadata.get("content_hash", "")),
+                    "chunks": 0,
+                    "pages": set(),
+                }
+            docs[doc_id]["chunks"] += 1
+            if metadata.get("page_number") is not None:
+                docs[doc_id]["pages"].add(int(metadata["page_number"]))
+        for d in docs.values():
+            d["pages"] = len(d["pages"])
+        return jsonify(documents=list(docs.values()))
+    except Exception as error:
+        return jsonify(detail=str(error)), 500
+
+
+@app.delete("/api/documents/<document_id>")
+def delete_document_route(document_id):
+    access_error = verify_access_code(
+        request.headers.get("X-App-Access-Code")
+        or request.form.get("access_code")
+    )
+    if access_error:
+        return access_error
+    try:
+        deleted = delete_document(document_id)
+        return jsonify(deleted_chunks=deleted, document_id=document_id)
+    except Exception as error:
+        return jsonify(detail=str(error)), 500

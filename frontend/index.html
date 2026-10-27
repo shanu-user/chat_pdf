@@ -222,6 +222,7 @@
           <form id="question-form" class="composer">
             <textarea id="question" maxlength="1000" placeholder="Ask a question about your sources…" aria-label="Your question" required></textarea>
             <div class="composer-bottom">
+              <input id="access-code" class="access-field" type="password" autocomplete="current-password" placeholder="Access code">
               <button id="ask-button" type="submit"><span aria-hidden="true">↑</span></button>
             </div>
           </form>
@@ -243,12 +244,14 @@
       const maxSources = 5;
       const API_BASE_URL = "https://sourcebook-backend-djse.onrender.com/";
       let sources = [];
+      let documentIds = [];
 
       function renderSources() {
         sourceCount.textContent = `${sources.length} / ${maxSources}`;
         const empty = document.querySelector(".empty-sources");
         if (!sources.length) {
           empty.style.display = "block";
+          documentIds = [];
           document.querySelectorAll(".source-slot").forEach((slot) => {
             slot.className = "source-slot";
             slot.innerHTML = "";
@@ -281,6 +284,7 @@
               remove.textContent = "×";
               remove.addEventListener("click", () => {
                 sources = sources.filter((f) => f !== file);
+                documentIds = [];
                 renderSources();
               });
               item.append(icon, name, remove);
@@ -349,10 +353,12 @@
         }
       }
 
-      fileInput.addEventListener("change", () => {
+      fileInput.addEventListener("change", async () => {
         status.textContent = "";
+        const files = Array.from(fileInput.files);
         const names = new Set(sources.map((file) => file.name));
-        for (const file of fileInput.files) {
+        const newFiles = [];
+        for (const file of files) {
           if (!file.name.toLowerCase().endsWith(".pdf")) {
             status.textContent = "Attach PDF files only.";
           } else if (names.has(file.name)) {
@@ -360,12 +366,48 @@
           } else if (sources.length >= maxSources) {
             status.textContent = `Attach no more than ${maxSources} sources.`;
           } else {
-            sources.push(file);
+            newFiles.push(file);
             names.add(file.name);
+            sources.push(file);
           }
         }
         fileInput.value = "";
-        renderSources();
+
+        if (newFiles.length === 0) {
+          renderSources();
+          return;
+        }
+
+        status.textContent = "Uploading and indexing PDFs…";
+        const formData = new FormData();
+        for (const file of newFiles) formData.append("sources", file);
+
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/upload`, {
+            method: "POST",
+            headers: { "X-App-Access-Code": document.getElementById("access-code")?.value || "" },
+            body: formData,
+          });
+          const result = await response.json();
+          if (!response.ok) {
+            throw new Error(result.detail || "Upload failed.");
+          }
+          for (const doc of result.documents) {
+            if (doc.status === "indexed" || doc.status === "already_indexed") {
+              documentIds.push(doc.document_id);
+            }
+          }
+          renderSources();
+          status.textContent = "";
+        } catch (error) {
+          status.textContent = error instanceof Error ? error.message : "Upload failed.";
+          // Remove files that failed to upload
+          for (const file of newFiles) {
+            const idx = sources.indexOf(file);
+            if (idx >= 0) sources.splice(idx, 1);
+          }
+          renderSources();
+        }
       });
 
       let abortController = null;
@@ -382,11 +424,6 @@
           status.textContent = "Enter a question.";
           return;
         }
-        const totalBytes = sources.reduce((total, file) => total + file.size, 0);
-        if (totalBytes > maxPdfBytes) {
-          status.textContent = "The combined PDF size must be 25 MB or less.";
-          return;
-        }
 
         if (abortController) {
           abortController.abort();
@@ -400,7 +437,7 @@
         setSendingState(true);
         const data = new FormData();
         data.append("question", question);
-        for (const source of sources) data.append("sources", source);
+        data.append("document_id", documentIds.join(","));
 
         try {
           const response = await fetch(`${API_BASE_URL}/api/ask`, { method: "POST", body: data, signal: abortController.signal });
